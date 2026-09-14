@@ -30,6 +30,8 @@ android/app/*.iml
 .idea/
 *.hprof
 
-# Keystore
+# Keystore (Private keys ignored, debug.keystore explicitly allowed for reproducible CI build fingerprint)
 *.jks
 *.keystore
+!android/app/debug.keystore
+
