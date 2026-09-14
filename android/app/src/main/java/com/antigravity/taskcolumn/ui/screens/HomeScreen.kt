@@ -127,8 +127,13 @@ fun HomeScreen(
                             .clickable {
                                 if (!isAuthenticated) {
                                     val authUrl = authManager.buildAuthUrl()
-                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
-                                    context.startActivity(intent)
+                                    try {
+                                        val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder().build()
+                                        customTabsIntent.launchUrl(context, Uri.parse(authUrl))
+                                    } catch (_: Exception) {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
+                                        context.startActivity(intent)
+                                    }
                                 }
                             }
                     ) {

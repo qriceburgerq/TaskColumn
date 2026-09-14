@@ -73,7 +73,7 @@ class MainActivity : ComponentActivity() {
 
     private fun handleAuthIntent(intent: Intent?) {
         val uri = intent?.data ?: return
-        if (uri.scheme == "com.antigravity.taskcolumn" && uri.host == "oauth2callback") {
+        if (uri.scheme == "com.antigravity.taskcolumn") {
             val code = uri.getQueryParameter("code")
             if (code != null) {
                 lifecycleScope.launch {
@@ -84,6 +84,11 @@ class MainActivity : ComponentActivity() {
                     } else {
                         Toast.makeText(this@MainActivity, "授權失敗: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
                     }
+                }
+            } else {
+                val error = uri.getQueryParameter("error")
+                if (error != null) {
+                    Toast.makeText(this@MainActivity, "授權取消或失敗: $error", Toast.LENGTH_LONG).show()
                 }
             }
         }
