@@ -1,5 +1,7 @@
 package com.antigravity.taskcolumn.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -127,7 +129,14 @@ fun SettingsScreen(
                         } else {
                             Button(
                                 onClick = {
-                                    authManager.startOAuth(context)
+                                    val authUrl = authManager.buildAuthUrl()
+                                    try {
+                                        val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder().build()
+                                        customTabsIntent.launchUrl(context, Uri.parse(authUrl))
+                                    } catch (_: Exception) {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
+                                        context.startActivity(intent)
+                                    }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
                                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
@@ -460,10 +469,10 @@ private fun SettingsSection(
 
 private fun getSmartFilterMeta(id: String): Triple<String, androidx.compose.ui.graphics.vector.ImageVector, Color> {
     return when (id) {
-        "pending" -> Triple("待辦中", Icons.Default.HourglassTop, AccentBlue)
-        "today" -> Triple("今天到期", Icons.Default.Today, CalendarBlue)
-        "upcoming" -> Triple("即將到來", Icons.Default.Event, PurpleTag)
-        "all" -> Triple("全部待辦", Icons.Default.Inbox, MaterialThemeColors.textSecondary)
+        "pending" -> Triple("待辦中", Icons.Outlined.Schedule, AccentBlue)
+        "today" -> Triple("今天到期", Icons.Default.Star, StarOrange)
+        "upcoming" -> Triple("即將到來", Icons.Outlined.CalendarMonth, CalendarTeal)
+        "all" -> Triple("全部待辦", Icons.Outlined.Inbox, BoxPurple)
         "completed" -> Triple("已完成事項", Icons.Default.CheckCircle, CheckmarkGreen)
         "trash" -> Triple("垃圾桶", Icons.Outlined.Delete, TrashRed)
         else -> Triple(id, Icons.Default.Folder, AccentBlue)
