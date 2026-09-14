@@ -24,9 +24,9 @@ class AuthManager(context: Context = TaskColumnApplication.instance) {
     private val _userEmail = MutableStateFlow(prefs.getString("user_email", null))
     val userEmail: StateFlow<String?> = _userEmail
 
-    // Default Client Credentials (same as desktop project)
-    val defaultClientId: String = "310076156698-" + "k67931ib6uau67o4clmqpp2plpp0eg1i" + ".apps.googleusercontent.com"
-    val defaultClientSecret: String = "GOCSPX" + "-" + "Jk_UdCGAnio_7YL0qZp903hYMVHs"
+    // Default Android Client ID (generated from Google Cloud Console for com.antigravity.taskcolumn)
+    val defaultClientId = "310076156698-" + "9to80c1nsp7n36ncds9ic324nhimuo92" + ".apps.googleusercontent.com"
+    val defaultClientSecret = ""
     val redirectUri = "com.antigravity.taskcolumn:/oauth2callback"
 
     fun getClientId(): String {
@@ -58,17 +58,20 @@ class AuthManager(context: Context = TaskColumnApplication.instance) {
 
     suspend fun exchangeCodeForToken(code: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
-            val body = FormBody.Builder()
+            val bodyBuilder = FormBody.Builder()
                 .add("code", code)
                 .add("client_id", getClientId())
-                .add("client_secret", getClientSecret())
                 .add("redirect_uri", redirectUri)
                 .add("grant_type", "authorization_code")
-                .build()
+
+            val secret = getClientSecret()
+            if (secret.isNotBlank()) {
+                bodyBuilder.add("client_secret", secret)
+            }
 
             val request = Request.Builder()
                 .url("https://oauth2.googleapis.com/token")
-                .post(body)
+                .post(bodyBuilder.build())
                 .build()
 
             val response = client.newCall(request).execute()
