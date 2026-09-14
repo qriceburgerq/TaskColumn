@@ -296,6 +296,7 @@ fun HomeScreen(
                             repository.setFilter(SmartFilterType.CustomList(list.id, list.title))
                             scope.launch { drawerState.close() }
                         }
+                    )
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
