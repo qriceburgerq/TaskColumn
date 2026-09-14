@@ -1,0 +1,35 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+
+# Swift / Xcode
+swift-cache/
+*.swiftdoc
+*.swiftmodule
+
+# App Releases (Binaries are large, exclude from git if desired or track only necessary ones)
+releases/*/TaskColumn.app/
+releases/*/TaskColumn_bin
+
+# Android / Gradle
+.gradle/
+build/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/app/*.iml
+*.apk
+*.ap_
+*.aab
+.idea/
+*.hprof
+
+# Keystore
+*.jks
+*.keystore
