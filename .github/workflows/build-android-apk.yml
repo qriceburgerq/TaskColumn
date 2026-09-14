@@ -6,6 +6,9 @@ on:
     tags: [ "v*" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build & Package APK
@@ -29,15 +32,11 @@ jobs:
       - name: Build Debug APK with Gradle
         run: |
           cd android
-          gradle assembleDebug --stacktrace 2>&1 | tee ../build.log || {
-            echo "## ❌ Build Failure Details" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -n 120 ../build.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            exit 1
-          }
-          echo "Generated APKs:"
-          find app/build/outputs/apk -name "*.apk"
+          gradle assembleDebug --stacktrace
+
+      - name: Verify APK Generated
+        run: |
+          ls -la android/app/build/outputs/apk/debug/
 
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
