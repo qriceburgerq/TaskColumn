@@ -31,6 +31,26 @@
                 <data android:scheme="com.antigravity.taskcolumn" />
             </intent-filter>
         </activity>
+
+        <!-- Desktop Widget Receiver -->
+        <receiver
+            android:name=".widget.TaskWidgetProvider"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.antigravity.taskcolumn.widget.ACTION_TOGGLE_TASK" />
+                <action android:name="com.antigravity.taskcolumn.widget.ACTION_REFRESH_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/task_widget_info" />
+        </receiver>
+
+        <!-- Desktop Widget RemoteViews Service -->
+        <service
+            android:name=".widget.TaskWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
     </application>
 
 </manifest>

@@ -4,7 +4,10 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import android.graphics.Color
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -20,15 +23,29 @@ import com.antigravity.taskcolumn.data.repository.TaskRepository
 import com.antigravity.taskcolumn.ui.screens.HomeScreen
 import com.antigravity.taskcolumn.ui.screens.TaskDetailScreen
 import com.antigravity.taskcolumn.ui.theme.TaskColumnTheme
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val authManager = AuthManager.shared
     private val repository = TaskRepository.shared
 
+    private val pendingWidgetTaskId = MutableStateFlow<String?>(null)
+    private val pendingWidgetAction = MutableStateFlow<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+        )
         super.onCreate(savedInstanceState)
         handleAuthIntent(intent)
+
+        pendingWidgetTaskId.value = intent?.getStringExtra("taskId")
+        pendingWidgetAction.value = intent?.getStringExtra("action")
 
         setContent {
             TaskColumnTheme {
@@ -37,12 +54,23 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
+                    val targetTaskId by pendingWidgetTaskId.collectAsState()
+                    val targetAction by pendingWidgetAction.collectAsState()
+
+                    LaunchedEffect(targetTaskId) {
+                        targetTaskId?.let {
+                            navController.navigate("detail/$it")
+                            pendingWidgetTaskId.value = null
+                        }
+                    }
 
                     NavHost(navController = navController, startDestination = "home") {
                         composable("home") {
                             HomeScreen(
                                 repository = repository,
                                 authManager = authManager,
+                                initialAction = targetAction,
+                                onClearInitialAction = { pendingWidgetAction.value = null },
                                 onNavigateToDetail = { taskId ->
                                     navController.navigate("detail/$taskId")
                                 }
@@ -69,6 +97,8 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleAuthIntent(intent)
+        intent.getStringExtra("taskId")?.let { pendingWidgetTaskId.value = it }
+        intent.getStringExtra("action")?.let { pendingWidgetAction.value = it }
     }
 
     private fun handleAuthIntent(intent: Intent?) {

@@ -25,11 +25,14 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
 import com.antigravity.taskcolumn.data.auth.AuthManager
 import com.antigravity.taskcolumn.data.model.SmartFilterType
 import com.antigravity.taskcolumn.data.model.TaskItem
 import com.antigravity.taskcolumn.data.model.TaskStatus
 import com.antigravity.taskcolumn.data.repository.TaskRepository
+import com.antigravity.taskcolumn.data.updater.AppUpdateManager
+import com.antigravity.taskcolumn.data.updater.UpdateInfo
 import com.antigravity.taskcolumn.ui.theme.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -41,6 +44,8 @@ import java.util.Locale
 fun HomeScreen(
     repository: TaskRepository = TaskRepository.shared,
     authManager: AuthManager = AuthManager.shared,
+    initialAction: String? = null,
+    onClearInitialAction: () -> Unit = {},
     onNavigateToDetail: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -57,6 +62,24 @@ fun HomeScreen(
     val userEmail by authManager.userEmail.collectAsState()
 
     var showQuickAddSheet by remember { mutableStateOf(false) }
+    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+
+    LaunchedEffect(initialAction) {
+        if (initialAction == "quick_add") {
+            showQuickAddSheet = true
+            onClearInitialAction()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val res = AppUpdateManager.shared.checkUpdate()
+        res.onSuccess { info ->
+            if (info.hasUpdate) {
+                updateInfo = info
+            }
+        }
+    }
 
     // Filter tasks based on selectedFilter & search
     val displayedTasks = remember(allTasks, trashTasks, selectedFilter, searchQuery) {
@@ -273,6 +296,45 @@ fun HomeScreen(
                             repository.setFilter(SmartFilterType.CustomList(list.id, list.title))
                             scope.launch { drawerState.close() }
                         }
+                }
+
+                Spacer(modifier = Modifier.weight(1f))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            if (!isCheckingUpdate) {
+                                isCheckingUpdate = true
+                                scope.launch {
+                                    val res = AppUpdateManager.shared.checkUpdate()
+                                    isCheckingUpdate = false
+                                    res.onSuccess { info ->
+                                        if (info.hasUpdate) {
+                                            updateInfo = info
+                                        } else {
+                                            Toast.makeText(context, "目前已是最新版本 (v${info.currentVersion})", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }.onFailure {
+                                        Toast.makeText(context, "檢查更新失敗: ${it.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SystemUpdate,
+                        contentDescription = "檢查更新",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = if (isCheckingUpdate) "正在檢查更新..." else "版本 1.0.1 (點擊檢查更新)",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -384,6 +446,39 @@ fun HomeScreen(
                     onAddTask = { title, notes, due ->
                         repository.addTask(title = title, notes = notes, due = due)
                         showQuickAddSheet = false
+                    }
+                )
+            }
+
+            // Update Dialog
+            updateInfo?.let { info ->
+                AlertDialog(
+                    onDismissRequest = { updateInfo = null },
+                    title = { Text("發現新版本 v${info.latestVersion}", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column {
+                            Text("當前版本: v${info.currentVersion}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text("更新說明：\n${info.releaseNotes}", fontSize = 14.sp)
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val url = info.downloadUrl
+                                if (!url.isNullOrBlank()) {
+                                    AppUpdateManager.shared.openDownloadUrl(context, url)
+                                }
+                                updateInfo = null
+                            }
+                        ) {
+                            Text("立即下載更新")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { updateInfo = null }) {
+                            Text("稍後再說")
+                        }
                     }
                 )
             }

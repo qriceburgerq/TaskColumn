@@ -83,9 +83,18 @@ class TaskRepository(
                     }
                 }
                 _allTasks.value = collected
+                notifyWidgetUpdate()
             }
             _isSyncing.value = false
         }
+    }
+
+    private fun notifyWidgetUpdate() {
+        try {
+            com.antigravity.taskcolumn.widget.TaskWidgetProvider.updateAllWidgets(
+                com.antigravity.taskcolumn.TaskColumnApplication.instance
+            )
+        } catch (_: Exception) {}
     }
 
     fun addTask(title: String, notes: String? = null, due: Long? = null, listId: String? = null): TaskItem {
@@ -101,6 +110,7 @@ class TaskRepository(
         val updatedList = _allTasks.value.toMutableList()
         updatedList.add(0, newTask)
         _allTasks.value = updatedList
+        notifyWidgetUpdate()
 
         if (authManager.hasValidToken()) {
             scope.launch {
@@ -110,6 +120,7 @@ class TaskRepository(
                         if (it.id == newTask.id) it.copy(id = created.id) else it
                     }
                     _allTasks.value = refreshed
+                    notifyWidgetUpdate()
                 }
             }
         }
@@ -122,6 +133,7 @@ class TaskRepository(
         val updated = current.copy(status = newStatus, updated = System.currentTimeMillis())
 
         _allTasks.value = _allTasks.value.map { if (it.id == taskId) updated else it }
+        notifyWidgetUpdate()
 
         if (authManager.hasValidToken()) {
             scope.launch {
@@ -132,6 +144,7 @@ class TaskRepository(
 
     fun updateTask(task: TaskItem) {
         _allTasks.value = _allTasks.value.map { if (it.id == task.id) task else it }
+        notifyWidgetUpdate()
         if (authManager.hasValidToken()) {
             scope.launch {
                 api.updateTask(task.listId, task)
@@ -142,6 +155,7 @@ class TaskRepository(
     fun deleteTask(taskId: String) {
         val task = _allTasks.value.find { it.id == taskId } ?: return
         _allTasks.value = _allTasks.value.filter { it.id != taskId }
+        notifyWidgetUpdate()
 
         val trashed = task.copy(deletedAt = System.currentTimeMillis())
         _trashTasks.value = listOf(trashed) + _trashTasks.value

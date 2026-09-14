@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#E61C1C1E"
+    android:padding="12dp">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingBottom="8dp">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="TaskColumn"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/widget_btn_refresh"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:padding="4dp"
+            android:src="@android:drawable/ic_popup_sync"
+            android:contentDescription="重新整理" />
+
+        <ImageView
+            android:id="@+id/widget_btn_add"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_marginStart="6dp"
+            android:padding="4dp"
+            android:src="@android:drawable/ic_input_add"
+            android:contentDescription="新增待辦" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#2C2C2E"
+        android:layout_marginBottom="6dp" />
+
+    <!-- Frame for ListView and Empty View -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <ListView
+            android:id="@+id/widget_task_listview"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:divider="@null"
+            android:dividerHeight="4dp" />
+
+        <TextView
+            android:id="@+id/widget_empty_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="目前沒有進行中的待辦 🎉"
+            android:textColor="#8E8E93"
+            android:textSize="13sp"
+            android:visibility="gone" />
+    </FrameLayout>
+</LinearLayout>
