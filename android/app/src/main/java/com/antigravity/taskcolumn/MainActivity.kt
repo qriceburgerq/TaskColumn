@@ -18,9 +18,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import com.antigravity.taskcolumn.data.auth.AuthManager
 import com.antigravity.taskcolumn.data.repository.TaskRepository
+import com.antigravity.taskcolumn.data.settings.AppSettingsManager
 import com.antigravity.taskcolumn.ui.screens.HomeScreen
+import com.antigravity.taskcolumn.ui.screens.SettingsScreen
 import com.antigravity.taskcolumn.ui.screens.TaskDetailScreen
 import com.antigravity.taskcolumn.ui.theme.TaskColumnTheme
 import androidx.compose.runtime.LaunchedEffect
@@ -32,6 +37,7 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val authManager = AuthManager.shared
     private val repository = TaskRepository.shared
+    private val settingsManager = AppSettingsManager.shared
 
     private val pendingWidgetTaskId = MutableStateFlow<String?>(null)
     private val pendingWidgetAction = MutableStateFlow<String?>(null)
@@ -48,45 +54,65 @@ class MainActivity : ComponentActivity() {
         pendingWidgetAction.value = intent?.getStringExtra("action")
 
         setContent {
-            TaskColumnTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    val navController = rememberNavController()
-                    val targetTaskId by pendingWidgetTaskId.collectAsState()
-                    val targetAction by pendingWidgetAction.collectAsState()
+            val fontScale by settingsManager.fontScale.collectAsState()
+            val currentDensity = LocalDensity.current
+            val customDensity = Density(
+                density = currentDensity.density,
+                fontScale = currentDensity.fontScale * fontScale
+            )
 
-                    LaunchedEffect(targetTaskId) {
-                        targetTaskId?.let {
-                            navController.navigate("detail/$it")
-                            pendingWidgetTaskId.value = null
-                        }
-                    }
+            CompositionLocalProvider(LocalDensity provides customDensity) {
+                TaskColumnTheme {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
+                        val navController = rememberNavController()
+                        val targetTaskId by pendingWidgetTaskId.collectAsState()
+                        val targetAction by pendingWidgetAction.collectAsState()
 
-                    NavHost(navController = navController, startDestination = "home") {
-                        composable("home") {
-                            HomeScreen(
-                                repository = repository,
-                                authManager = authManager,
-                                initialAction = targetAction,
-                                onClearInitialAction = { pendingWidgetAction.value = null },
-                                onNavigateToDetail = { taskId ->
-                                    navController.navigate("detail/$taskId")
-                                }
-                            )
+                        LaunchedEffect(targetTaskId) {
+                            targetTaskId?.let {
+                                navController.navigate("detail/$it")
+                                pendingWidgetTaskId.value = null
+                            }
                         }
 
-                        composable(
-                            route = "detail/{taskId}",
-                            arguments = listOf(navArgument("taskId") { type = NavType.StringType })
-                        ) { backStackEntry ->
-                            val taskId = backStackEntry.arguments?.getString("taskId") ?: ""
-                            TaskDetailScreen(
-                                taskId = taskId,
-                                repository = repository,
-                                onNavigateBack = { navController.popBackStack() }
-                            )
+                        NavHost(navController = navController, startDestination = "home") {
+                            composable("home") {
+                                HomeScreen(
+                                    repository = repository,
+                                    authManager = authManager,
+                                    settingsManager = settingsManager,
+                                    initialAction = targetAction,
+                                    onClearInitialAction = { pendingWidgetAction.value = null },
+                                    onNavigateToSettings = { navController.navigate("settings") },
+                                    onNavigateToDetail = { taskId ->
+                                        navController.navigate("detail/$taskId")
+                                    }
+                                )
+                            }
+
+                            composable(
+                                route = "detail/{taskId}",
+                                arguments = listOf(navArgument("taskId") { type = NavType.StringType })
+                            ) { backStackEntry ->
+                                val taskId = backStackEntry.arguments?.getString("taskId") ?: ""
+                                TaskDetailScreen(
+                                    taskId = taskId,
+                                    repository = repository,
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
+                            }
+
+                            composable("settings") {
+                                SettingsScreen(
+                                    repository = repository,
+                                    authManager = authManager,
+                                    settingsManager = settingsManager,
+                                    onNavigateBack = { navController.popBackStack() }
+                                )
+                            }
                         }
                     }
                 }

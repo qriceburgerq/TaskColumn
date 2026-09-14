@@ -31,8 +31,7 @@ import com.antigravity.taskcolumn.data.model.SmartFilterType
 import com.antigravity.taskcolumn.data.model.TaskItem
 import com.antigravity.taskcolumn.data.model.TaskStatus
 import com.antigravity.taskcolumn.data.repository.TaskRepository
-import com.antigravity.taskcolumn.data.updater.AppUpdateManager
-import com.antigravity.taskcolumn.data.updater.UpdateInfo
+import com.antigravity.taskcolumn.data.settings.AppSettingsManager
 import com.antigravity.taskcolumn.ui.theme.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -44,8 +43,10 @@ import java.util.Locale
 fun HomeScreen(
     repository: TaskRepository = TaskRepository.shared,
     authManager: AuthManager = AuthManager.shared,
+    settingsManager: AppSettingsManager = AppSettingsManager.shared,
     initialAction: String? = null,
     onClearInitialAction: () -> Unit = {},
+    onNavigateToSettings: () -> Unit = {},
     onNavigateToDetail: (String) -> Unit
 ) {
     val context = LocalContext.current
@@ -60,24 +61,14 @@ fun HomeScreen(
     val searchQuery by repository.searchQuery.collectAsState()
     val isAuthenticated by authManager.isAuthenticated.collectAsState()
     val userEmail by authManager.userEmail.collectAsState()
+    val filterOrder by settingsManager.smartFilterOrder.collectAsState()
 
     var showQuickAddSheet by remember { mutableStateOf(false) }
-    var updateInfo by remember { mutableStateOf<UpdateInfo?>(null) }
-    var isCheckingUpdate by remember { mutableStateOf(false) }
 
     LaunchedEffect(initialAction) {
         if (initialAction == "quick_add") {
             showQuickAddSheet = true
             onClearInitialAction()
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        val res = AppUpdateManager.shared.checkUpdate()
-        res.onSuccess { info ->
-            if (info.hasUpdate) {
-                updateInfo = info
-            }
         }
     }
 
@@ -202,77 +193,76 @@ fun HomeScreen(
                     modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp)
                 )
 
-                DrawerItem(
-                    title = "待辦中",
-                    icon = Icons.Outlined.Schedule,
-                    iconColor = AccentBlue,
-                    count = allTasks.count { !it.isCompleted },
-                    isSelected = selectedFilter is SmartFilterType.Pending,
-                    onClick = {
-                        repository.setFilter(SmartFilterType.Pending)
-                        scope.launch { drawerState.close() }
+                filterOrder.forEach { filterId ->
+                    when (filterId) {
+                        "pending" -> DrawerItem(
+                            title = "待辦中",
+                            icon = Icons.Outlined.Schedule,
+                            iconColor = AccentBlue,
+                            count = allTasks.count { !it.isCompleted },
+                            isSelected = selectedFilter is SmartFilterType.Pending,
+                            onClick = {
+                                repository.setFilter(SmartFilterType.Pending)
+                                scope.launch { drawerState.close() }
+                            }
+                        )
+                        "today" -> DrawerItem(
+                            title = "今天到期",
+                            icon = Icons.Default.Star,
+                            iconColor = StarOrange,
+                            count = allTasks.count { !it.isCompleted && (it.isToday || it.isOverdue) },
+                            isSelected = selectedFilter is SmartFilterType.Today,
+                            onClick = {
+                                repository.setFilter(SmartFilterType.Today)
+                                scope.launch { drawerState.close() }
+                            }
+                        )
+                        "upcoming" -> DrawerItem(
+                            title = "即將到來",
+                            icon = Icons.Outlined.CalendarMonth,
+                            iconColor = CalendarTeal,
+                            count = allTasks.count { !it.isCompleted && it.isUpcoming },
+                            isSelected = selectedFilter is SmartFilterType.Upcoming,
+                            onClick = {
+                                repository.setFilter(SmartFilterType.Upcoming)
+                                scope.launch { drawerState.close() }
+                            }
+                        )
+                        "all" -> DrawerItem(
+                            title = "全部待辦",
+                            icon = Icons.Outlined.Inbox,
+                            iconColor = BoxPurple,
+                            count = allTasks.size,
+                            isSelected = selectedFilter is SmartFilterType.All,
+                            onClick = {
+                                repository.setFilter(SmartFilterType.All)
+                                scope.launch { drawerState.close() }
+                            }
+                        )
+                        "completed" -> DrawerItem(
+                            title = "已完成事項",
+                            icon = Icons.Default.CheckCircle,
+                            iconColor = CheckmarkGreen,
+                            count = allTasks.count { it.isCompleted },
+                            isSelected = selectedFilter is SmartFilterType.Completed,
+                            onClick = {
+                                repository.setFilter(SmartFilterType.Completed)
+                                scope.launch { drawerState.close() }
+                            }
+                        )
+                        "trash" -> DrawerItem(
+                            title = "垃圾桶",
+                            icon = Icons.Outlined.Delete,
+                            iconColor = TrashRed,
+                            count = trashTasks.size,
+                            isSelected = selectedFilter is SmartFilterType.Trash,
+                            onClick = {
+                                repository.setFilter(SmartFilterType.Trash)
+                                scope.launch { drawerState.close() }
+                            }
+                        )
                     }
-                )
-
-                DrawerItem(
-                    title = "今天到期",
-                    icon = Icons.Default.Star,
-                    iconColor = StarOrange,
-                    count = allTasks.count { !it.isCompleted && (it.isToday || it.isOverdue) },
-                    isSelected = selectedFilter is SmartFilterType.Today,
-                    onClick = {
-                        repository.setFilter(SmartFilterType.Today)
-                        scope.launch { drawerState.close() }
-                    }
-                )
-
-                DrawerItem(
-                    title = "即將到來",
-                    icon = Icons.Outlined.CalendarMonth,
-                    iconColor = CalendarTeal,
-                    count = allTasks.count { !it.isCompleted && it.isUpcoming },
-                    isSelected = selectedFilter is SmartFilterType.Upcoming,
-                    onClick = {
-                        repository.setFilter(SmartFilterType.Upcoming)
-                        scope.launch { drawerState.close() }
-                    }
-                )
-
-                DrawerItem(
-                    title = "全部待辦",
-                    icon = Icons.Outlined.Inbox,
-                    iconColor = BoxPurple,
-                    count = allTasks.size,
-                    isSelected = selectedFilter is SmartFilterType.All,
-                    onClick = {
-                        repository.setFilter(SmartFilterType.All)
-                        scope.launch { drawerState.close() }
-                    }
-                )
-
-                DrawerItem(
-                    title = "已完成事項",
-                    icon = Icons.Default.CheckCircle,
-                    iconColor = CheckmarkGreen,
-                    count = allTasks.count { it.isCompleted },
-                    isSelected = selectedFilter is SmartFilterType.Completed,
-                    onClick = {
-                        repository.setFilter(SmartFilterType.Completed)
-                        scope.launch { drawerState.close() }
-                    }
-                )
-
-                DrawerItem(
-                    title = "垃圾桶",
-                    icon = Icons.Outlined.Delete,
-                    iconColor = TrashRed,
-                    count = trashTasks.size,
-                    isSelected = selectedFilter is SmartFilterType.Trash,
-                    onClick = {
-                        repository.setFilter(SmartFilterType.Trash)
-                        scope.launch { drawerState.close() }
-                    }
-                )
+                }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
@@ -305,37 +295,24 @@ fun HomeScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            if (!isCheckingUpdate) {
-                                isCheckingUpdate = true
-                                scope.launch {
-                                    val res = AppUpdateManager.shared.checkUpdate()
-                                    isCheckingUpdate = false
-                                    res.onSuccess { info ->
-                                        if (info.hasUpdate) {
-                                            updateInfo = info
-                                        } else {
-                                            Toast.makeText(context, "目前已是最新版本 (v${info.currentVersion})", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }.onFailure {
-                                        Toast.makeText(context, "檢查更新失敗: ${it.message}", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
+                            scope.launch { drawerState.close() }
+                            onNavigateToSettings()
                         }
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "檢查更新",
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "設定",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                     Text(
-                        text = if (isCheckingUpdate) "正在檢查更新..." else "版本 1.0.1 (點擊檢查更新)",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "設定 (偏好與帳號)",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
@@ -381,6 +358,11 @@ fun HomeScreen(
                             IconButton(onClick = { repository.emptyTrash() }) {
                                 Icon(imageVector = Icons.Default.DeleteForever, contentDescription = "清空垃圾桶", tint = TrashRed)
                             }
+                        }
+
+                        // Settings Button
+                        IconButton(onClick = onNavigateToSettings) {
+                            Icon(imageVector = Icons.Default.Settings, contentDescription = "設定")
                         }
                     }
                 )
@@ -447,39 +429,6 @@ fun HomeScreen(
                     onAddTask = { title, notes, due ->
                         repository.addTask(title = title, notes = notes, due = due)
                         showQuickAddSheet = false
-                    }
-                )
-            }
-
-            // Update Dialog
-            updateInfo?.let { info ->
-                AlertDialog(
-                    onDismissRequest = { updateInfo = null },
-                    title = { Text("發現新版本 v${info.latestVersion}", fontWeight = FontWeight.Bold) },
-                    text = {
-                        Column {
-                            Text("當前版本: v${info.currentVersion}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Text("更新說明：\n${info.releaseNotes}", fontSize = 14.sp)
-                        }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                val url = info.downloadUrl
-                                if (!url.isNullOrBlank()) {
-                                    AppUpdateManager.shared.openDownloadUrl(context, url)
-                                }
-                                updateInfo = null
-                            }
-                        ) {
-                            Text("立即下載更新")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(onClick = { updateInfo = null }) {
-                            Text("稍後再說")
-                        }
                     }
                 )
             }

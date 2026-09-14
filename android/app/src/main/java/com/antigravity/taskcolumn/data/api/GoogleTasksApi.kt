@@ -192,4 +192,49 @@ class GoogleTasksApi(
             Result.failure(e)
         }
     }
+
+    suspend fun createTaskList(title: String): Result<TaskList> = withContext(Dispatchers.IO) {
+        try {
+            val auth = getAuthHeader() ?: return@withContext Result.failure(Exception("尚未登入 Google 帳號"))
+            val jsonBody = JSONObject().apply {
+                put("title", title)
+            }
+            val req = Request.Builder()
+                .url("$baseUrl/users/@me/lists")
+                .header("Authorization", auth)
+                .post(jsonBody.toString().toRequestBody(jsonMediaType))
+                .build()
+
+            val resp = client.newCall(req).execute()
+            val text = resp.body?.string().orEmpty()
+            if (resp.isSuccessful) {
+                val json = JSONObject(text)
+                Result.success(TaskList(id = json.getString("id"), title = json.getString("title")))
+            } else {
+                Result.failure(Exception("建立清單失敗: ${resp.code} $text"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deleteTaskList(listId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val auth = getAuthHeader() ?: return@withContext Result.failure(Exception("尚未登入 Google 帳號"))
+            val req = Request.Builder()
+                .url("$baseUrl/users/@me/lists/$listId")
+                .header("Authorization", auth)
+                .delete()
+                .build()
+
+            val resp = client.newCall(req).execute()
+            if (resp.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                Result.failure(Exception("刪除清單失敗: ${resp.code}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }

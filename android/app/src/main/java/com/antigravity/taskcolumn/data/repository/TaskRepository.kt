@@ -30,7 +30,7 @@ class TaskRepository(
     private val _allTasks = MutableStateFlow<List<TaskItem>>(loadCachedTasks())
     val allTasks: StateFlow<List<TaskItem>> = _allTasks.asStateFlow()
 
-    private val _lists = MutableStateFlow<List<TaskList>>(listOf(TaskList("default", "主要待辦")))
+    private val _lists = MutableStateFlow<List<TaskList>>(loadCachedLists())
     val lists: StateFlow<List<TaskList>> = _lists.asStateFlow()
 
     private val _trashTasks = MutableStateFlow<List<TaskItem>>(emptyList())
@@ -76,6 +76,24 @@ class TaskRepository(
         } catch (_: Exception) {}
     }
 
+    private fun loadCachedLists(): List<TaskList> {
+        val raw = prefs.getString("cached_lists", null)
+        if (!raw.isNullOrBlank()) {
+            try {
+                val parsed = json.decodeFromString<List<TaskList>>(raw)
+                if (parsed.isNotEmpty()) return parsed
+            } catch (_: Exception) {}
+        }
+        return listOf(TaskList("default", "主要待辦"))
+    }
+
+    private fun saveListsToCache(lists: List<TaskList>) {
+        try {
+            val raw = json.encodeToString(lists)
+            prefs.edit().putString("cached_lists", raw).apply()
+        } catch (_: Exception) {}
+    }
+
     fun setFilter(filter: SmartFilterType) {
         _selectedFilter.value = filter
     }
@@ -93,6 +111,7 @@ class TaskRepository(
             val listsResult = api.fetchTaskLists()
             listsResult.onSuccess { remoteLists ->
                 _lists.value = remoteLists
+                saveListsToCache(remoteLists)
                 val collected = mutableListOf<TaskItem>()
                 for (l in remoteLists) {
                     val tasksResult = api.fetchTasks(l.id)
@@ -104,6 +123,55 @@ class TaskRepository(
                 notifyWidgetUpdate()
             }
             _isSyncing.value = false
+        }
+    }
+
+    fun addTaskList(title: String) {
+        val trimmed = title.trim()
+        if (trimmed.isBlank()) return
+        val tempId = UUID.randomUUID().toString()
+        val newList = TaskList(id = tempId, title = trimmed)
+        val updatedLists = _lists.value + newList
+        _lists.value = updatedLists
+        saveListsToCache(updatedLists)
+
+        if (authManager.hasValidToken()) {
+            scope.launch {
+                val res = api.createTaskList(trimmed)
+                res.onSuccess { created ->
+                    val replaced = _lists.value.map { if (it.id == tempId) created else it }
+                    _lists.value = replaced
+                    saveListsToCache(replaced)
+                    val updatedTasks = _allTasks.value.map {
+                        if (it.listId == tempId) it.copy(listId = created.id) else it
+                    }
+                    _allTasks.value = updatedTasks
+                    notifyWidgetUpdate()
+                }
+            }
+        }
+    }
+
+    fun deleteTaskList(listId: String) {
+        if (listId == "default" && _lists.value.size <= 1) return
+        val updatedLists = _lists.value.filter { it.id != listId }
+        _lists.value = if (updatedLists.isEmpty()) listOf(TaskList("default", "主要待辦")) else updatedLists
+        saveListsToCache(_lists.value)
+
+        // Move tasks to trash or remove
+        val toTrash = _allTasks.value.filter { it.listId == listId }
+        _trashTasks.value = toTrash + _trashTasks.value
+        _allTasks.value = _allTasks.value.filter { it.listId != listId }
+        notifyWidgetUpdate()
+
+        if ((_selectedFilter.value as? SmartFilterType.CustomList)?.listId == listId) {
+            _selectedFilter.value = SmartFilterType.Pending
+        }
+
+        if (authManager.hasValidToken()) {
+            scope.launch {
+                api.deleteTaskList(listId)
+            }
         }
     }
 
