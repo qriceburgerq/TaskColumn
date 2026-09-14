@@ -6,8 +6,12 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.net.Uri
 import android.widget.RemoteViews
+import androidx.annotation.DrawableRes
+import androidx.core.content.ContextCompat
 import com.antigravity.taskcolumn.MainActivity
 import com.antigravity.taskcolumn.R
 import com.antigravity.taskcolumn.data.repository.TaskRepository
@@ -44,8 +48,30 @@ class TaskWidgetProvider : AppWidgetProvider() {
         const val ACTION_VIEW_TASK = "com.antigravity.taskcolumn.widget.ACTION_VIEW_TASK"
         const val EXTRA_TASK_ID = "extra_task_id"
 
+        private fun vectorToBitmap(context: Context, @DrawableRes resId: Int, sizeDp: Int = 24): Bitmap {
+            val drawable = ContextCompat.getDrawable(context, resId)
+                ?: return Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+            val density = context.resources.displayMetrics.density
+            val px = (sizeDp * density).toInt().coerceAtLeast(1)
+            val bitmap = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
+            drawable.setBounds(0, 0, px, px)
+            drawable.draw(canvas)
+            return bitmap
+        }
+
         fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
             val views = RemoteViews(context.packageName, R.layout.widget_task_list)
+
+            // Safely set rasterized bitmaps for vector icons to avoid RemoteViews cross-process vector crash
+            views.setImageViewBitmap(
+                R.id.widget_btn_refresh,
+                vectorToBitmap(context, R.drawable.ic_widget_sync, 24)
+            )
+            views.setImageViewBitmap(
+                R.id.widget_btn_add,
+                vectorToBitmap(context, R.drawable.ic_widget_add, 24)
+            )
 
             // Setup ListView Adapter via RemoteViewsService
             val serviceIntent = Intent(context, TaskWidgetService::class.java).apply {

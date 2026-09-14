@@ -29,7 +29,6 @@
             android:layout_width="28dp"
             android:layout_height="28dp"
             android:padding="4dp"
-            android:src="@drawable/ic_widget_sync"
             android:contentDescription="重新整理" />
 
         <ImageView
@@ -38,11 +37,10 @@
             android:layout_height="28dp"
             android:layout_marginStart="6dp"
             android:padding="4dp"
-            android:src="@drawable/ic_widget_add"
             android:contentDescription="新增待辦" />
     </LinearLayout>
 
-    <View
+    <ImageView
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="#2C2C2E"

@@ -1,5 +1,7 @@
 package com.antigravity.taskcolumn.data.repository
 
+import android.content.Context
+import com.antigravity.taskcolumn.TaskColumnApplication
 import com.antigravity.taskcolumn.data.api.GoogleTasksApi
 import com.antigravity.taskcolumn.data.auth.AuthManager
 import com.antigravity.taskcolumn.data.model.SmartFilterType
@@ -12,14 +14,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.util.UUID
 
 class TaskRepository(
     private val api: GoogleTasksApi = GoogleTasksApi(),
     private val authManager: AuthManager = AuthManager.shared,
+    private val context: Context = TaskColumnApplication.instance,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.Main)
 ) {
-    private val _allTasks = MutableStateFlow<List<TaskItem>>(emptyList())
+    private val prefs = context.getSharedPreferences("taskcolumn_cache_prefs", Context.MODE_PRIVATE)
+    private val json = Json { ignoreUnknownKeys = true }
+
+    private val _allTasks = MutableStateFlow<List<TaskItem>>(loadCachedTasks())
     val allTasks: StateFlow<List<TaskItem>> = _allTasks.asStateFlow()
 
     private val _lists = MutableStateFlow<List<TaskList>>(listOf(TaskList("default", "主要待辦")))
@@ -37,25 +45,35 @@ class TaskRepository(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
-    init {
-        // Provide sample starter tasks if empty
-        if (_allTasks.value.isEmpty()) {
-            _allTasks.value = listOf(
-                TaskItem(
-                    id = UUID.randomUUID().toString(),
-                    listId = "default",
-                    title = "歡迎使用 TaskColumn 手機版！",
-                    notes = "登入 Google 帳號後，所有待辦與 Mac 桌面端即時無縫同步。",
-                    due = System.currentTimeMillis()
-                ),
-                TaskItem(
-                    id = UUID.randomUUID().toString(),
-                    listId = "default",
-                    title = "點選右下方「+」快速新增待辦事項",
-                    notes = "支援設定自訂到期日與詳細備忘。"
-                )
-            )
+    private fun loadCachedTasks(): List<TaskItem> {
+        val raw = prefs.getString("cached_tasks", null)
+        if (!raw.isNullOrBlank()) {
+            try {
+                return json.decodeFromString<List<TaskItem>>(raw)
+            } catch (_: Exception) {}
         }
+        return listOf(
+            TaskItem(
+                id = UUID.randomUUID().toString(),
+                listId = "default",
+                title = "歡迎使用 TaskColumn 手機版！",
+                notes = "登入 Google 帳號後，所有待辦與 Mac 桌面端即時無縫同步。",
+                due = System.currentTimeMillis()
+            ),
+            TaskItem(
+                id = UUID.randomUUID().toString(),
+                listId = "default",
+                title = "點選右下方「+」快速新增待辦事項",
+                notes = "支援設定自訂到期日與詳細備忘。"
+            )
+        )
+    }
+
+    private fun saveTasksToCache(tasks: List<TaskItem>) {
+        try {
+            val raw = json.encodeToString(tasks)
+            prefs.edit().putString("cached_tasks", raw).apply()
+        } catch (_: Exception) {}
     }
 
     fun setFilter(filter: SmartFilterType) {
@@ -90,6 +108,7 @@ class TaskRepository(
     }
 
     private fun notifyWidgetUpdate() {
+        saveTasksToCache(_allTasks.value)
         try {
             com.antigravity.taskcolumn.widget.TaskWidgetProvider.updateAllWidgets(
                 com.antigravity.taskcolumn.TaskColumnApplication.instance

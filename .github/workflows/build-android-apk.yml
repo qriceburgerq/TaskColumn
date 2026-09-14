@@ -41,7 +41,7 @@ jobs:
       - name: Upload Debug APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: TaskColumn-Android-Debug-APK-v1.0.1
+          name: TaskColumn-Android-Debug-APK-${{ github.ref_name }}
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           overwrite: true
