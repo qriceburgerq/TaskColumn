@@ -79,81 +79,85 @@ fun QuickAddBottomSheet(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Quick Due Chips
+            // Quick Due Chips & Send Button
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                FilterChip(
-                    selected = selectedDueMode == 1,
-                    onClick = {
-                        if (selectedDueMode == 1) {
-                            selectedDueMode = 0
-                        } else {
-                            selectedDueMode = 1
-                            customDueTimestamp = null
-                        }
-                    },
-                    label = { Text("今天", fontSize = 12.sp) }
-                )
-
-                FilterChip(
-                    selected = selectedDueMode == 2,
-                    onClick = {
-                        if (selectedDueMode == 2) {
-                            selectedDueMode = 0
-                        } else {
-                            selectedDueMode = 2
-                            customDueTimestamp = null
-                        }
-                    },
-                    label = { Text("明天", fontSize = 12.sp) }
-                )
-
-                FilterChip(
-                    selected = selectedDueMode == 3,
-                    onClick = {
-                        if (selectedDueMode == 3 && customDueTimestamp != null) {
-                            // Reset custom
-                            selectedDueMode = 0
-                            customDueTimestamp = null
-                        } else {
-                            showDatePicker = true
-                        }
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.CalendarMonth,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = if (selectedDueMode == 3) AccentBlue else CalendarTeal
-                        )
-                    },
-                    trailingIcon = if (selectedDueMode == 3 && customDueTimestamp != null) {
-                        {
-                            IconButton(
-                                onClick = {
-                                    selectedDueMode = 0
-                                    customDueTimestamp = null
-                                },
-                                modifier = Modifier.size(16.dp)
-                            ) {
-                                Icon(imageVector = Icons.Default.Close, contentDescription = "清除", modifier = Modifier.size(14.dp))
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FilterChip(
+                        selected = selectedDueMode == 1,
+                        onClick = {
+                            if (selectedDueMode == 1) {
+                                selectedDueMode = 0
+                            } else {
+                                selectedDueMode = 1
+                                customDueTimestamp = null
                             }
-                        }
-                    } else null,
-                    label = {
-                        Text(
-                            text = customDateStr ?: "自訂日期與時間",
-                            fontSize = 12.sp
-                        )
-                    }
-                )
+                        },
+                        label = { Text("今天", fontSize = 12.sp) }
+                    )
 
-                Spacer(modifier = Modifier.weight(1f, fill = false))
+                    FilterChip(
+                        selected = selectedDueMode == 2,
+                        onClick = {
+                            if (selectedDueMode == 2) {
+                                selectedDueMode = 0
+                            } else {
+                                selectedDueMode = 2
+                                customDueTimestamp = null
+                            }
+                        },
+                        label = { Text("明天", fontSize = 12.sp) }
+                    )
+
+                    FilterChip(
+                        selected = selectedDueMode == 3,
+                        onClick = {
+                            if (selectedDueMode == 3 && customDueTimestamp != null) {
+                                selectedDueMode = 0
+                                customDueTimestamp = null
+                            } else {
+                                showDatePicker = true
+                            }
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = if (selectedDueMode == 3) AccentBlue else CalendarTeal
+                            )
+                        },
+                        trailingIcon = {
+                            if (selectedDueMode == 3 && customDueTimestamp != null) {
+                                IconButton(
+                                    onClick = {
+                                        selectedDueMode = 0
+                                        customDueTimestamp = null
+                                    },
+                                    modifier = Modifier.size(16.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.Close, contentDescription = "清除", modifier = Modifier.size(14.dp))
+                                }
+                            }
+                        },
+                        label = {
+                            Text(
+                                text = customDateStr ?: "自訂日期與時間",
+                                fontSize = 12.sp
+                            )
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 IconButton(
                     onClick = {
