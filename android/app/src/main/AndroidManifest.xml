@@ -32,6 +32,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Desktop Widget Router Activity (Transparent for silent background toggles or smooth detail launch) -->
+        <activity
+            android:name=".widget.TaskWidgetRouterActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.TaskColumn.Transparent" />
+
         <!-- Desktop Widget Receiver -->
         <receiver
             android:name=".widget.TaskWidgetProvider"

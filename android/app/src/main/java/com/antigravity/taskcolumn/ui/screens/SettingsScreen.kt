@@ -330,7 +330,7 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("版本", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
-                            Text("v1.1.0 (Build 4)", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("v1.1.1 (Build 5)", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),

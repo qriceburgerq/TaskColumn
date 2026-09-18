@@ -61,11 +61,23 @@ class TaskRemoteViewsFactory(private val context: Context) : RemoteViewsService.
             views.setViewVisibility(R.id.widget_item_due, View.GONE)
         }
 
-        // Fill-in Intent to open task in detail screen
-        val fillInIntent = Intent().apply {
+        // 1. Fill-in Intent for checking off task (circle checkbox)
+        val toggleIntent = Intent().apply {
+            action = TaskWidgetProvider.ACTION_TOGGLE_TASK
+            putExtra(TaskWidgetProvider.EXTRA_TASK_ID, task.id)
             putExtra("taskId", task.id)
         }
-        views.setOnClickFillInIntent(R.id.widget_item_container, fillInIntent)
+        views.setOnClickFillInIntent(R.id.widget_item_checkbox_area, toggleIntent)
+        views.setOnClickFillInIntent(R.id.widget_item_checkbox, toggleIntent)
+
+        // 2. Fill-in Intent to open task in detail screen (content & row)
+        val viewIntent = Intent().apply {
+            action = TaskWidgetProvider.ACTION_VIEW_TASK
+            putExtra(TaskWidgetProvider.EXTRA_TASK_ID, task.id)
+            putExtra("taskId", task.id)
+        }
+        views.setOnClickFillInIntent(R.id.widget_item_container, viewIntent)
+        views.setOnClickFillInIntent(R.id.widget_item_content, viewIntent)
 
         return views
     }

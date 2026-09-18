@@ -11,17 +11,25 @@
     android:paddingTop="10dp"
     android:paddingBottom="10dp">
 
-    <!-- Circle Checkbox -->
-    <ImageView
-        android:id="@+id/widget_item_checkbox"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:layout_marginEnd="10dp"
-        android:src="@drawable/ic_widget_circle"
-        android:contentDescription="完成待辦" />
+    <!-- Circle Checkbox with expanded touch target -->
+    <FrameLayout
+        android:id="@+id/widget_item_checkbox_area"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_marginEnd="6dp">
+
+        <ImageView
+            android:id="@+id/widget_item_checkbox"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_widget_circle"
+            android:contentDescription="完成待辦" />
+    </FrameLayout>
 
     <!-- Task Title & Due -->
     <LinearLayout
+        android:id="@+id/widget_item_content"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"

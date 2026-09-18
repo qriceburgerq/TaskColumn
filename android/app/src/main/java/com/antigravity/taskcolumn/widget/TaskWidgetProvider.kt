@@ -109,8 +109,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_btn_add, addPendingIntent)
 
-            // ListItem Click Template
-            val clickIntentTemplate = Intent(context, MainActivity::class.java)
+            // ListItem Click Template pointing to TaskWidgetRouterActivity
+            val clickIntentTemplate = Intent(context, TaskWidgetRouterActivity::class.java)
             val clickPendingIntentTemplate = PendingIntent.getActivity(
                 context, 3, clickIntentTemplate,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
