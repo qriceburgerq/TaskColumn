@@ -42,6 +42,9 @@ class TaskRepository(
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
+    private val _syncErrorMessage = MutableStateFlow<String?>(null)
+    val syncErrorMessage: StateFlow<String?> = _syncErrorMessage.asStateFlow()
+
     private val _lastSyncTime = MutableStateFlow<Long?>(prefs.getLong("last_sync_time", 0).let { if (it > 0) it else null })
     val lastSyncTime: StateFlow<Long?> = _lastSyncTime.asStateFlow()
 
@@ -111,6 +114,8 @@ class TaskRepository(
 
         scope.launch {
             _isSyncing.value = true
+            _syncErrorMessage.value = null
+
             val listsResult = api.fetchTaskLists()
             listsResult.onSuccess { remoteLists ->
                 _lists.value = remoteLists
@@ -123,11 +128,16 @@ class TaskRepository(
                     }
                 }
 
-                // Protect offline-created tasks:
-                // Any task in current _allTasks whose id is NOT in collected (e.g. UUID id)
+                // Protect offline-created tasks (exclude welcome/sample tasks):
+                // Any task in current _allTasks whose id is NOT in collected
                 // should be uploaded to Google Tasks, not lost!
                 val remoteIds = collected.map { it.id }.toSet()
-                val unsyncedLocal = _allTasks.value.filter { it.id !in remoteIds && !it.isCompleted }
+                val unsyncedLocal = _allTasks.value.filter {
+                    it.id !in remoteIds &&
+                    !it.isCompleted &&
+                    !it.title.startsWith("歡迎使用") &&
+                    !it.title.startsWith("點選右下方")
+                }
                 val targetListId = remoteLists.firstOrNull()?.id ?: "@default"
 
                 for (localItem in unsyncedLocal) {
@@ -144,6 +154,13 @@ class TaskRepository(
                 _lastSyncTime.value = now
                 prefs.edit().putLong("last_sync_time", now).apply()
                 notifyWidgetUpdate()
+            }.onFailure { error ->
+                val msg = error.message ?: "同步失敗"
+                _syncErrorMessage.value = msg
+                // If 401 Unauthorized, automatically sign out so stale tokens are cleared
+                if (msg.contains("401") || msg.contains("尚未登入")) {
+                    authManager.signOut()
+                }
             }
             _isSyncing.value = false
         }

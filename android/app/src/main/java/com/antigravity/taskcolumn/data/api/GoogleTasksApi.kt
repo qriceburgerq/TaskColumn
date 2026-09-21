@@ -16,11 +16,18 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.TimeUnit
 
 class GoogleTasksApi(
     private val authManager: AuthManager = AuthManager.shared
 ) {
-    private val client = OkHttpClient()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
     private val baseUrl = "https://tasks.googleapis.com/tasks/v1"
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
@@ -35,6 +42,12 @@ class GoogleTasksApi(
 
     private fun normalizeListId(listId: String): String {
         return if (listId == "default" || listId.isBlank()) "@default" else listId
+    }
+
+    private fun JSONObject.optNullableString(name: String): String? {
+        if (!has(name) || isNull(name)) return null
+        val v = optString(name, "").trim()
+        return if (v.isEmpty() || v.equals("null", ignoreCase = true)) null else v
     }
 
     suspend fun fetchTaskLists(): Result<List<TaskList>> = withContext(Dispatchers.IO) {
@@ -56,12 +69,9 @@ class GoogleTasksApi(
             val lists = mutableListOf<TaskList>()
             for (i in 0 until items.length()) {
                 val item = items.getJSONObject(i)
-                lists.add(
-                    TaskList(
-                        id = item.getString("id"),
-                        title = item.getString("title")
-                    )
-                )
+                val id = item.getString("id")
+                val title = item.optNullableString("title") ?: "未命名清單"
+                lists.add(TaskList(id = id, title = title))
             }
             Result.success(lists)
         } catch (e: Exception) {
@@ -89,22 +99,26 @@ class GoogleTasksApi(
             val tasks = mutableListOf<TaskItem>()
             for (i in 0 until items.length()) {
                 val item = items.getJSONObject(i)
-                val statusStr = item.optString("status", "needsAction")
+                val statusStr = item.optNullableString("status") ?: "needsAction"
                 val status = if (statusStr == "completed") TaskStatus.COMPLETED else TaskStatus.NEEDS_ACTION
-                val dueStr = item.optString("due", null)
+                val dueStr = item.optNullableString("due")
                 val dueTime = if (!dueStr.isNullOrEmpty()) {
                     try { rfc3339Format.parse(dueStr)?.time } catch (_: Exception) { null }
                 } else null
+
+                val title = item.optNullableString("title") ?: "未命名待辦"
+                val notes = item.optNullableString("notes")
+                val parent = item.optNullableString("parent")
 
                 tasks.add(
                     TaskItem(
                         id = item.getString("id"),
                         listId = targetListId,
-                        title = item.optString("title", "未命名待辦"),
-                        notes = item.optString("notes", null),
+                        title = title,
+                        notes = notes,
                         due = dueTime,
                         status = status,
-                        parent = item.optString("parent", null)
+                        parent = parent
                     )
                 )
             }

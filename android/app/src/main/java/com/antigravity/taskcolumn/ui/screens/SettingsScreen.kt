@@ -49,6 +49,7 @@ fun SettingsScreen(
     val isAuthorizing by authManager.isAuthorizing.collectAsState()
     val authErrorMessage by authManager.authErrorMessage.collectAsState()
     val isSyncing by repository.isSyncing.collectAsState()
+    val syncErrorMessage by repository.syncErrorMessage.collectAsState()
     val lastSyncTime by repository.lastSyncTime.collectAsState()
     val fontScale by settingsManager.fontScale.collectAsState()
     val filterOrder by settingsManager.smartFilterOrder.collectAsState()
@@ -200,6 +201,17 @@ fun SettingsScreen(
                                     Text("登入", fontSize = 13.sp, color = Color.White)
                                 }
                             }
+
+                        if (isAuthenticated && !syncErrorMessage.isNullOrBlank()) {
+                            Text(
+                                text = "同步提示：$syncErrorMessage",
+                                fontSize = 12.sp,
+                                color = TrashRed,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(TrashRed.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                                    .padding(8.dp)
+                            )
                         }
 
                         if (!isAuthenticated) {
@@ -452,7 +464,7 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("版本", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
-                            Text("v1.1.2 (Build 6)", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("v1.1.3 (Build 7)", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),

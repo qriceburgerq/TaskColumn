@@ -150,7 +150,10 @@ class MainActivity : ComponentActivity() {
             val code = uri.getQueryParameter("code")
             if (code != null) {
                 lifecycleScope.launch {
-                    val res = authManager.exchangeCodeForToken(code, authManager.fallbackSchemeRedirectUri)
+                    var res = authManager.exchangeCodeForToken(code, authManager.redirectUri)
+                    if (res.isFailure && res.exceptionOrNull()?.message?.contains("redirect_uri") == true) {
+                        res = authManager.exchangeCodeForToken(code, authManager.fallbackSchemeRedirectUri)
+                    }
                     if (res.isSuccess) {
                         Toast.makeText(this@MainActivity, "Google 帳號連線成功！正在同步...", Toast.LENGTH_SHORT).show()
                         repository.syncWithGoogle()

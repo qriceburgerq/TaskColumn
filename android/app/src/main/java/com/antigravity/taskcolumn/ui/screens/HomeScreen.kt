@@ -93,15 +93,15 @@ fun HomeScreen(
     // Filter tasks based on selectedFilter & search
     val displayedTasks = remember(allTasks, trashTasks, selectedFilter, searchQuery) {
         val base = when (selectedFilter) {
-            is SmartFilterType.Pending -> allTasks.filter { it.parent == null && !it.isCompleted }
-            is SmartFilterType.Today -> allTasks.filter { it.parent == null && (it.isToday || it.isOverdue) }
-            is SmartFilterType.Upcoming -> allTasks.filter { it.parent == null && it.isUpcoming }
-            is SmartFilterType.All -> allTasks.filter { it.parent == null }
-            is SmartFilterType.Completed -> allTasks.filter { it.parent == null && it.isCompleted }
+            is SmartFilterType.Pending -> allTasks.filter { it.isTopLevel && !it.isCompleted }
+            is SmartFilterType.Today -> allTasks.filter { it.isTopLevel && (it.isToday || it.isOverdue) }
+            is SmartFilterType.Upcoming -> allTasks.filter { it.isTopLevel && it.isUpcoming }
+            is SmartFilterType.All -> allTasks.filter { it.isTopLevel }
+            is SmartFilterType.Completed -> allTasks.filter { it.isTopLevel && it.isCompleted }
             is SmartFilterType.Trash -> trashTasks
             is SmartFilterType.CustomList -> {
                 val lid = (selectedFilter as SmartFilterType.CustomList).listId
-                allTasks.filter { it.parent == null && it.listId == lid }
+                allTasks.filter { it.isTopLevel && it.listId == lid }
             }
         }
         if (searchQuery.isBlank()) base else {

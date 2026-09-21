@@ -25,6 +25,9 @@ data class TaskItem(
     val isCompleted: Boolean
         get() = status == TaskStatus.COMPLETED
 
+    val isTopLevel: Boolean
+        get() = parent == null || parent == "null" || parent?.isBlank() == true
+
     val isOverdue: Boolean
         get() {
             if (isCompleted) return false

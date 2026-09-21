@@ -7,6 +7,7 @@ import com.antigravity.taskcolumn.TaskColumnApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -15,15 +16,29 @@ import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetSocketAddress
 import java.net.ServerSocket
+import java.util.concurrent.TimeUnit
 
 class AuthManager(context: Context = TaskColumnApplication.instance) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("taskcolumn_auth_prefs", Context.MODE_PRIVATE)
-    private val client = OkHttpClient()
+
+    private val exchangeMutex = Mutex()
+    @Volatile
+    private var lastExchangedCode: String? = null
+
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true)
+        .build()
+
     private val scope = CoroutineScope(Dispatchers.IO)
 
     private val _isAuthenticated = MutableStateFlow(hasValidToken())
@@ -98,7 +113,7 @@ class AuthManager(context: Context = TaskColumnApplication.instance) {
         // Try refreshing token
         val refreshToken = prefs.getString("refresh_token", null)
         if (refreshToken.isNullOrBlank()) {
-            return@withContext token // Fallback to current token if no refresh token
+            return@withContext if (expiry > now) token else null
         }
 
         val refreshResult = refreshAccessToken(refreshToken)
@@ -106,7 +121,8 @@ class AuthManager(context: Context = TaskColumnApplication.instance) {
             return@withContext refreshResult.getOrNull()
         }
 
-        return@withContext token
+        // If refresh failed and token expired, return null to force re-auth
+        return@withContext if (expiry > now) token else null
     }
 
     private suspend fun refreshAccessToken(refreshToken: String): Result<String> = withContext(Dispatchers.IO) {
@@ -139,6 +155,11 @@ class AuthManager(context: Context = TaskColumnApplication.instance) {
                 _isAuthenticated.value = true
                 Result.success(newAccessToken)
             } else {
+                // If token is invalid or revoked, auto sign out to clear stale credentials
+                if (response.code in 400..401) {
+                    signOut()
+                    _authErrorMessage.value = "Google 登入憑證已失效，請重新點擊登入"
+                }
                 Result.failure(Exception("Token refresh failed: $text"))
             }
         } catch (e: Exception) {
@@ -158,8 +179,9 @@ class AuthManager(context: Context = TaskColumnApplication.instance) {
     }
 
     /**
-     * Starts a lightweight local HTTP server listening on 127.0.0.1:8089 to receive
-     * the OAuth redirect callback from the Chrome browser.
+     * Starts a lightweight local HTTP server listening on 127.0.0.1:8089.
+     * When Chrome receives the callback, the server redirects it to com.antigravity.taskcolumn
+     * so Android automatically brings TaskColumn to the FOREGROUND before token exchange.
      */
     fun startLocalServer(onAuthCompleted: (Boolean, String?) -> Unit) {
         stopLocalServer()
@@ -194,10 +216,16 @@ class AuthManager(context: Context = TaskColumnApplication.instance) {
 
                     <!DOCTYPE html>
                     <html>
-                    <head><meta charset="utf-8"><title>授權成功 - TaskColumn</title></head>
+                    <head>
+                        <meta charset="utf-8">
+                        <meta http-equiv="refresh" content="0;url=com.antigravity.taskcolumn:/oauth2callback?code=$authCode">
+                        <script>
+                            window.location.href = "com.antigravity.taskcolumn:/oauth2callback?code=$authCode";
+                        </script>
+                    </head>
                     <body style="font-family: sans-serif; text-align: center; padding-top: 60px; background-color: #121212; color: #fff;">
-                        <h2 style="color: #4CAF50;">🎉 Google 帳號授權成功！</h2>
-                        <p style="color: #aaa;">您現在可以關閉此瀏覽器分頁，返回 TaskColumn 應用程式即可開始雙向同步。</p>
+                        <h2 style="color: #4CAF50;">🎉 授權成功，正在返回 TaskColumn...</h2>
+                        <p style="color: #aaa;"><a href="com.antigravity.taskcolumn:/oauth2callback?code=$authCode" style="color: #0A84FF; font-size: 16px;">點擊此處立即返回應用程式</a></p>
                     </body>
                     </html>
                     """.trimIndent()
@@ -223,6 +251,9 @@ class AuthManager(context: Context = TaskColumnApplication.instance) {
                 server.close()
 
                 if (!authCode.isNullOrEmpty()) {
+                    // Give Chrome a short moment to launch com.antigravity.taskcolumn intent
+                    // which brings TaskColumn to foreground with full network permission
+                    delay(300)
                     val result = exchangeCodeForToken(authCode, redirectUri)
                     withContext(Dispatchers.Main) {
                         _isAuthorizing.value = false
@@ -283,8 +314,15 @@ class AuthManager(context: Context = TaskColumnApplication.instance) {
         exchangeCodeForToken(code, usedRedirectUri)
     }
 
+    /**
+     * Exchanges auth code for access & refresh tokens with automatic retries.
+     */
     suspend fun exchangeCodeForToken(code: String, customRedirectUri: String? = null): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
+        exchangeMutex.withLock {
+            if (lastExchangedCode == code && hasValidToken()) {
+                return@withLock Result.success(Unit)
+            }
+
             val targetRedirect = customRedirectUri ?: redirectUri
             val bodyBuilder = FormBody.Builder()
                 .add("code", code)
@@ -302,29 +340,41 @@ class AuthManager(context: Context = TaskColumnApplication.instance) {
                 .post(bodyBuilder.build())
                 .build()
 
-            val response = client.newCall(request).execute()
-            val responseText = response.body?.string().orEmpty()
+            var lastException: Exception? = null
+            for (attempt in 1..3) {
+                try {
+                    val response = client.newCall(request).execute()
+                    val responseText = response.body?.string().orEmpty()
 
-            if (response.isSuccessful) {
-                val json = JSONObject(responseText)
-                val accessToken = json.getString("access_token")
-                val refreshToken = json.optString("refresh_token", null)
-                val expiresIn = json.optLong("expires_in", 3600)
+                    if (response.isSuccessful) {
+                        val json = JSONObject(responseText)
+                        val accessToken = json.getString("access_token")
+                        val refreshToken = json.optString("refresh_token", null)
+                        val expiresIn = json.optLong("expires_in", 3600)
 
-                saveTokens(accessToken, refreshToken, expiresIn)
-                fetchUserProfile(accessToken)
+                        saveTokens(accessToken, refreshToken, expiresIn)
+                        lastExchangedCode = code
+                        fetchUserProfile(accessToken)
 
-                _isAuthenticated.value = true
-                _authErrorMessage.value = null
-                Result.success(Unit)
-            } else {
-                val errMsg = "Token exchange failed: $responseText"
-                _authErrorMessage.value = errMsg
-                Result.failure(Exception(errMsg))
+                        _isAuthenticated.value = true
+                        _authErrorMessage.value = null
+                        return@withLock Result.success(Unit)
+                    } else {
+                        val errMsg = "Token exchange failed: $responseText"
+                        _authErrorMessage.value = errMsg
+                        return@withLock Result.failure(Exception(errMsg))
+                    }
+                } catch (e: Exception) {
+                    lastException = e
+                    if (attempt < 3) {
+                        delay(800L * attempt)
+                    }
+                }
             }
-        } catch (e: Exception) {
-            _authErrorMessage.value = e.message
-            Result.failure(e)
+
+            val err = lastException ?: Exception("網路連線失敗，請檢查網路後重試")
+            _authErrorMessage.value = err.message
+            Result.failure(err)
         }
     }
 
@@ -360,6 +410,7 @@ class AuthManager(context: Context = TaskColumnApplication.instance) {
 
     fun signOut() {
         stopLocalServer()
+        lastExchangedCode = null
         prefs.edit()
             .remove("access_token")
             .remove("refresh_token")

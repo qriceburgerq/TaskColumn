@@ -30,8 +30,8 @@ class TaskRemoteViewsFactory(private val context: Context) : RemoteViewsService.
     }
 
     private fun loadTasks() {
-        // Read uncompleted tasks from repository
-        tasks = TaskRepository.shared.allTasks.value.filter { !it.isCompleted }
+        // Read uncompleted top-level tasks from repository
+        tasks = TaskRepository.shared.allTasks.value.filter { it.isTopLevel && !it.isCompleted }
     }
 
     override fun onDestroy() {
