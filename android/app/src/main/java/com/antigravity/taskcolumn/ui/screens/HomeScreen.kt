@@ -14,11 +14,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -64,6 +67,21 @@ fun HomeScreen(
     val filterOrder by settingsManager.smartFilterOrder.collectAsState()
 
     var showQuickAddSheet by remember { mutableStateOf(false) }
+
+    val pullRefreshState = rememberPullToRefreshState()
+    if (pullRefreshState.isRefreshing) {
+        LaunchedEffect(true) {
+            if (isAuthenticated) {
+                repository.syncWithGoogle()
+            }
+            pullRefreshState.endRefresh()
+        }
+    }
+    LaunchedEffect(isSyncing) {
+        if (!isSyncing && pullRefreshState.isRefreshing) {
+            pullRefreshState.endRefresh()
+        }
+    }
 
     LaunchedEffect(initialAction) {
         if (initialAction == "quick_add") {
@@ -140,6 +158,14 @@ fun HomeScreen(
                             .fillMaxWidth()
                             .clickable {
                                 if (!isAuthenticated) {
+                                    authManager.startLocalServer { success, error ->
+                                        if (success) {
+                                            repository.syncWithGoogle()
+                                            Toast.makeText(context, "Google 帳號連線成功！正在同步...", Toast.LENGTH_SHORT).show()
+                                        } else if (error != null) {
+                                            Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                        }
+                                    }
                                     val authUrl = authManager.buildAuthUrl()
                                     try {
                                         val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder().build()
@@ -383,6 +409,7 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
+                    .nestedScroll(pullRefreshState.nestedScrollConnection)
             ) {
                 if (displayedTasks.isEmpty()) {
                     Column(
@@ -421,6 +448,13 @@ fun HomeScreen(
                         }
                     }
                 }
+
+                PullToRefreshContainer(
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    contentColor = AccentBlue
+                )
             }
 
             if (showQuickAddSheet) {

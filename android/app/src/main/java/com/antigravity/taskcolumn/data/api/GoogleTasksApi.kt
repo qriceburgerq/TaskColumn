@@ -28,9 +28,13 @@ class GoogleTasksApi(
         timeZone = TimeZone.getTimeZone("UTC")
     }
 
-    private fun getAuthHeader(): String? {
-        val token = authManager.getAccessToken() ?: return null
+    private suspend fun getAuthHeader(): String? {
+        val token = authManager.getValidAccessToken() ?: return null
         return "Bearer $token"
+    }
+
+    private fun normalizeListId(listId: String): String {
+        return if (listId == "default" || listId.isBlank()) "@default" else listId
     }
 
     suspend fun fetchTaskLists(): Result<List<TaskList>> = withContext(Dispatchers.IO) {
@@ -68,8 +72,9 @@ class GoogleTasksApi(
     suspend fun fetchTasks(listId: String): Result<List<TaskItem>> = withContext(Dispatchers.IO) {
         try {
             val auth = getAuthHeader() ?: return@withContext Result.failure(Exception("尚未登入 Google 帳號"))
+            val targetListId = normalizeListId(listId)
             val req = Request.Builder()
-                .url("$baseUrl/lists/$listId/tasks?showCompleted=true&showHidden=true")
+                .url("$baseUrl/lists/$targetListId/tasks?showCompleted=true&showHidden=true&maxResults=100")
                 .header("Authorization", auth)
                 .build()
 
@@ -94,7 +99,7 @@ class GoogleTasksApi(
                 tasks.add(
                     TaskItem(
                         id = item.getString("id"),
-                        listId = listId,
+                        listId = targetListId,
                         title = item.optString("title", "未命名待辦"),
                         notes = item.optString("notes", null),
                         due = dueTime,
@@ -112,6 +117,7 @@ class GoogleTasksApi(
     suspend fun createTask(listId: String, task: TaskItem): Result<TaskItem> = withContext(Dispatchers.IO) {
         try {
             val auth = getAuthHeader() ?: return@withContext Result.failure(Exception("尚未登入"))
+            val targetListId = normalizeListId(listId)
             val jsonBody = JSONObject().apply {
                 put("title", task.title)
                 if (!task.notes.isNullOrEmpty()) put("notes", task.notes)
@@ -121,8 +127,13 @@ class GoogleTasksApi(
                 put("status", task.status.value)
             }
 
+            var url = "$baseUrl/lists/$targetListId/tasks"
+            if (!task.parent.isNullOrEmpty()) {
+                url += "?parent=${task.parent}"
+            }
+
             val req = Request.Builder()
-                .url("$baseUrl/lists/$listId/tasks")
+                .url(url)
                 .header("Authorization", auth)
                 .post(jsonBody.toString().toRequestBody(jsonMediaType))
                 .build()
@@ -132,6 +143,7 @@ class GoogleTasksApi(
             if (resp.isSuccessful) {
                 val resObj = JSONObject(text)
                 task.id = resObj.getString("id")
+                task.listId = targetListId
                 Result.success(task)
             } else {
                 Result.failure(Exception("建立任務失敗: $text"))
@@ -144,6 +156,7 @@ class GoogleTasksApi(
     suspend fun updateTask(listId: String, task: TaskItem): Result<TaskItem> = withContext(Dispatchers.IO) {
         try {
             val auth = getAuthHeader() ?: return@withContext Result.failure(Exception("尚未登入"))
+            val targetListId = normalizeListId(listId)
             val jsonBody = JSONObject().apply {
                 put("id", task.id)
                 put("title", task.title)
@@ -157,7 +170,7 @@ class GoogleTasksApi(
             }
 
             val req = Request.Builder()
-                .url("$baseUrl/lists/$listId/tasks/${task.id}")
+                .url("$baseUrl/lists/$targetListId/tasks/${task.id}")
                 .header("Authorization", auth)
                 .put(jsonBody.toString().toRequestBody(jsonMediaType))
                 .build()
@@ -176,8 +189,9 @@ class GoogleTasksApi(
     suspend fun deleteTask(listId: String, taskId: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val auth = getAuthHeader() ?: return@withContext Result.failure(Exception("尚未登入"))
+            val targetListId = normalizeListId(listId)
             val req = Request.Builder()
-                .url("$baseUrl/lists/$listId/tasks/$taskId")
+                .url("$baseUrl/lists/$targetListId/tasks/$taskId")
                 .header("Authorization", auth)
                 .delete()
                 .build()
@@ -221,8 +235,9 @@ class GoogleTasksApi(
     suspend fun deleteTaskList(listId: String): Result<Unit> = withContext(Dispatchers.IO) {
         try {
             val auth = getAuthHeader() ?: return@withContext Result.failure(Exception("尚未登入 Google 帳號"))
+            val targetListId = normalizeListId(listId)
             val req = Request.Builder()
-                .url("$baseUrl/users/@me/lists/$listId")
+                .url("$baseUrl/users/@me/lists/$targetListId")
                 .header("Authorization", auth)
                 .delete()
                 .build()

@@ -42,6 +42,9 @@ class TaskRepository(
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
+    private val _lastSyncTime = MutableStateFlow<Long?>(prefs.getLong("last_sync_time", 0).let { if (it > 0) it else null })
+    val lastSyncTime: StateFlow<Long?> = _lastSyncTime.asStateFlow()
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -55,16 +58,16 @@ class TaskRepository(
         return listOf(
             TaskItem(
                 id = UUID.randomUUID().toString(),
-                listId = "default",
+                listId = "@default",
                 title = "歡迎使用 TaskColumn 手機版！",
-                notes = "登入 Google 帳號後，所有待辦與 Mac 桌面端即時無縫同步。",
+                notes = "登入 Google 帳號後，所有待辦與 Mac 桌面端即時無縫雙向同步。",
                 due = System.currentTimeMillis()
             ),
             TaskItem(
                 id = UUID.randomUUID().toString(),
-                listId = "default",
+                listId = "@default",
                 title = "點選右下方「+」快速新增待辦事項",
-                notes = "支援設定自訂到期日與詳細備忘。"
+                notes = "支援設定自訂到期日與詳細備忘筆記。"
             )
         )
     }
@@ -84,7 +87,7 @@ class TaskRepository(
                 if (parsed.isNotEmpty()) return parsed
             } catch (_: Exception) {}
         }
-        return listOf(TaskList("default", "主要待辦"))
+        return listOf(TaskList("@default", "主要待辦"))
     }
 
     private fun saveListsToCache(lists: List<TaskList>) {
@@ -119,7 +122,27 @@ class TaskRepository(
                         collected.addAll(tasks)
                     }
                 }
+
+                // Protect offline-created tasks:
+                // Any task in current _allTasks whose id is NOT in collected (e.g. UUID id)
+                // should be uploaded to Google Tasks, not lost!
+                val remoteIds = collected.map { it.id }.toSet()
+                val unsyncedLocal = _allTasks.value.filter { it.id !in remoteIds && !it.isCompleted }
+                val targetListId = remoteLists.firstOrNull()?.id ?: "@default"
+
+                for (localItem in unsyncedLocal) {
+                    val res = api.createTask(targetListId, localItem)
+                    res.onSuccess { created ->
+                        collected.add(0, created)
+                    }.onFailure {
+                        collected.add(0, localItem)
+                    }
+                }
+
                 _allTasks.value = collected
+                val now = System.currentTimeMillis()
+                _lastSyncTime.value = now
+                prefs.edit().putLong("last_sync_time", now).apply()
                 notifyWidgetUpdate()
             }
             _isSyncing.value = false
@@ -153,9 +176,9 @@ class TaskRepository(
     }
 
     fun deleteTaskList(listId: String) {
-        if (listId == "default" && _lists.value.size <= 1) return
+        if ((listId == "@default" || listId == "default") && _lists.value.size <= 1) return
         val updatedLists = _lists.value.filter { it.id != listId }
-        _lists.value = if (updatedLists.isEmpty()) listOf(TaskList("default", "主要待辦")) else updatedLists
+        _lists.value = if (updatedLists.isEmpty()) listOf(TaskList("@default", "主要待辦")) else updatedLists
         saveListsToCache(_lists.value)
 
         // Move tasks to trash or remove
@@ -185,7 +208,7 @@ class TaskRepository(
     }
 
     fun addTask(title: String, notes: String? = null, due: Long? = null, listId: String? = null): TaskItem {
-        val targetListId = listId ?: _lists.value.firstOrNull()?.id ?: "default"
+        val targetListId = listId ?: _lists.value.firstOrNull()?.id ?: "@default"
         val newTask = TaskItem(
             id = UUID.randomUUID().toString(),
             listId = targetListId,

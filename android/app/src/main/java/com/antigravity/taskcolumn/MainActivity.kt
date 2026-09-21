@@ -7,7 +7,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import android.graphics.Color
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -52,6 +51,11 @@ class MainActivity : ComponentActivity() {
 
         pendingWidgetTaskId.value = intent?.getStringExtra("taskId")
         pendingWidgetAction.value = intent?.getStringExtra("action")
+
+        // Auto sync if user already authenticated
+        if (authManager.hasValidToken()) {
+            repository.syncWithGoogle()
+        }
 
         setContent {
             val fontScale by settingsManager.fontScale.collectAsState()
@@ -120,6 +124,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Auto pull latest tasks on resume if authenticated
+        if (authManager.hasValidToken()) {
+            repository.syncWithGoogle()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        authManager.stopLocalServer()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleAuthIntent(intent)
@@ -133,7 +150,7 @@ class MainActivity : ComponentActivity() {
             val code = uri.getQueryParameter("code")
             if (code != null) {
                 lifecycleScope.launch {
-                    val res = authManager.exchangeCodeForToken(code)
+                    val res = authManager.exchangeCodeForToken(code, authManager.fallbackSchemeRedirectUri)
                     if (res.isSuccess) {
                         Toast.makeText(this@MainActivity, "Google 帳號連線成功！正在同步...", Toast.LENGTH_SHORT).show()
                         repository.syncWithGoogle()

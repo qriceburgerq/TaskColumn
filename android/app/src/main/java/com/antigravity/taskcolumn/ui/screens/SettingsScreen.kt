@@ -29,6 +29,10 @@ import com.antigravity.taskcolumn.data.repository.TaskRepository
 import com.antigravity.taskcolumn.data.settings.AppFontSize
 import com.antigravity.taskcolumn.data.settings.AppSettingsManager
 import com.antigravity.taskcolumn.ui.theme.*
+import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,8 +43,13 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val isAuthenticated by authManager.isAuthenticated.collectAsState()
     val userEmail by authManager.userEmail.collectAsState()
+    val isAuthorizing by authManager.isAuthorizing.collectAsState()
+    val authErrorMessage by authManager.authErrorMessage.collectAsState()
+    val isSyncing by repository.isSyncing.collectAsState()
+    val lastSyncTime by repository.lastSyncTime.collectAsState()
     val fontScale by settingsManager.fontScale.collectAsState()
     val filterOrder by settingsManager.smartFilterOrder.collectAsState()
     val lists by repository.lists.collectAsState()
@@ -49,6 +58,14 @@ fun SettingsScreen(
     var showAddListDialog by remember { mutableStateOf(false) }
     var newListName by remember { mutableStateOf("") }
     var listToDelete by remember { mutableStateOf<Pair<String, String>?>(null) } // id to title
+
+    var showManualCodeDialog by remember { mutableStateOf(false) }
+    var manualCodeInput by remember { mutableStateOf("") }
+    var isSubmittingManualCode by remember { mutableStateOf(false) }
+
+    var showCustomCredentialsDialog by remember { mutableStateOf(false) }
+    var customClientId by remember { mutableStateOf(authManager.getClientId()) }
+    var customClientSecret by remember { mutableStateOf(authManager.getClientSecret()) }
 
     Scaffold(
         topBar = {
@@ -77,71 +94,176 @@ fun SettingsScreen(
         ) {
             // Section 1: Google Account Management
             item {
-                SettingsSection(title = "Google 帳號與同步") {
-                    Row(
+                SettingsSection(
+                    title = "Google 帳號與同步",
+                    trailingAction = {
+                        if (isAuthenticated) {
+                            TextButton(
+                                onClick = { repository.syncWithGoogle() },
+                                enabled = !isSyncing
+                            ) {
+                                if (isSyncing) {
+                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("同步中...", fontSize = 12.sp, color = AccentBlue)
+                                } else {
+                                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(14.dp), tint = AccentBlue)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("立即同步", fontSize = 12.sp, color = AccentBlue)
+                                }
+                            }
+                        }
+                    }
+                ) {
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isAuthenticated) AccentBlue.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant),
-                                contentAlignment = Alignment.Center
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                modifier = Modifier.weight(1f)
                             ) {
-                                Icon(
-                                    imageVector = if (isAuthenticated) Icons.Default.CloudDone else Icons.Default.CloudOff,
-                                    contentDescription = null,
-                                    tint = if (isAuthenticated) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isAuthenticated) AccentBlue.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isAuthenticated) Icons.Default.CloudDone else Icons.Default.CloudOff,
+                                        contentDescription = null,
+                                        tint = if (isAuthenticated) AccentBlue else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = if (isAuthenticated) "已連線 Google Tasks" else "未連線 (離線單機模式)",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = if (isAuthenticated) {
+                                            val email = userEmail ?: "已授權"
+                                            val syncStr = lastSyncTime?.let {
+                                                " • 上次同步 " + SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it))
+                                            } ?: ""
+                                            email + syncStr
+                                        } else "待辦將僅保存在本機快取中",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                            Column {
-                                Text(
-                                    text = if (isAuthenticated) "已連線 Google Tasks" else "未連線 (離線單機模式)",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = if (isAuthenticated) (userEmail ?: "已授權") else "待辦將僅保存在本機快取中",
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+
+                            if (isAuthenticated) {
+                                OutlinedButton(
+                                    onClick = { showSignOutDialog = true },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TrashRed),
+                                    border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(TrashRed)),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text("登出", fontSize = 13.sp)
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        authManager.startLocalServer { success, error ->
+                                            if (success) {
+                                                repository.syncWithGoogle()
+                                                Toast.makeText(context, "Google 帳號連線成功！正在同步...", Toast.LENGTH_SHORT).show()
+                                            } else if (error != null) {
+                                                Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                        val authUrl = authManager.buildAuthUrl()
+                                        try {
+                                            val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder().build()
+                                            customTabsIntent.launchUrl(context, Uri.parse(authUrl))
+                                        } catch (_: Exception) {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
+                                            context.startActivity(intent)
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Text("登入", fontSize = 13.sp, color = Color.White)
+                                }
                             }
                         }
 
-                        if (isAuthenticated) {
-                            OutlinedButton(
-                                onClick = { showSignOutDialog = true },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TrashRed),
-                                border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(TrashRed)),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text("登出", fontSize = 13.sp)
+                        if (!isAuthenticated) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+
+                            Text(
+                                text = "已內建 Google OAuth 專用憑證（與 Mac 版相同）。點擊「登入」開啟瀏覽器授權；若跳轉受阻，可點擊下方按鈕手動貼入跳轉網址。",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            if (isAuthorizing) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(AccentBlue.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                                        .padding(8.dp)
+                                ) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = AccentBlue)
+                                    Text("正在監聽本機 8089 端口等待瀏覽器回傳...", fontSize = 12.sp, color = AccentBlue)
+                                }
                             }
-                        } else {
-                            Button(
-                                onClick = {
-                                    val authUrl = authManager.buildAuthUrl()
-                                    try {
-                                        val customTabsIntent = androidx.browser.customtabs.CustomTabsIntent.Builder().build()
-                                        customTabsIntent.launchUrl(context, Uri.parse(authUrl))
-                                    } catch (_: Exception) {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
-                                        context.startActivity(intent)
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+
+                            if (!authErrorMessage.isNullOrBlank()) {
+                                Text(
+                                    text = "錯誤：$authErrorMessage",
+                                    fontSize = 12.sp,
+                                    color = TrashRed,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(TrashRed.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
+                                        .padding(8.dp)
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("登入", fontSize = 13.sp, color = Color.White)
+                                OutlinedButton(
+                                    onClick = {
+                                        manualCodeInput = ""
+                                        showManualCodeDialog = true
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(Icons.Default.Key, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("手動回填授權碼 / 網址", fontSize = 12.sp)
+                                }
+
+                                TextButton(
+                                    onClick = {
+                                        customClientId = authManager.getClientId()
+                                        customClientSecret = authManager.getClientSecret()
+                                        showCustomCredentialsDialog = true
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text("自訂憑證", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
                         }
                     }
@@ -299,7 +421,7 @@ fun SettingsScreen(
                                     Text(list.title, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                                 }
 
-                                if (list.id != "default" || lists.size > 1) {
+                                if (list.id != "@default" && list.id != "default" && lists.size > 1) {
                                     IconButton(
                                         onClick = { listToDelete = list.id to list.title },
                                         modifier = Modifier.size(32.dp)
@@ -330,14 +452,14 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("版本", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
-                            Text("v1.1.1 (Build 5)", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("v1.1.2 (Build 6)", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("Google Tasks 同步", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
-                            Text(if (isAuthenticated) "已啟用 (即時同步)" else "已停用 (單機模式)", fontSize = 14.sp, color = if (isAuthenticated) CheckmarkGreen else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if (isAuthenticated) "已啟用 (即時雙向同步)" else "已停用 (單機模式)", fontSize = 14.sp, color = if (isAuthenticated) CheckmarkGreen else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -366,6 +488,126 @@ fun SettingsScreen(
             dismissButton = {
                 TextButton(onClick = { showSignOutDialog = false }) {
                     Text("取消")
+                }
+            }
+        )
+    }
+
+    // Manual Code Dialog
+    if (showManualCodeDialog) {
+        AlertDialog(
+            onDismissRequest = { if (!isSubmittingManualCode) showManualCodeDialog = false },
+            title = { Text("手動回填 Google 授權碼 / 網址") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "若瀏覽器無法自動跳轉回 App，請將瀏覽器網址列的完整跳轉網址（以 http://127.0.0.1:8089/callback?code=... 開頭）或授權碼直接貼入下方：",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = manualCodeInput,
+                        onValueChange = { manualCodeInput = it },
+                        placeholder = { Text("貼上完整跳轉網址或 code=...") },
+                        singleLine = false,
+                        maxLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (manualCodeInput.isNotBlank()) {
+                            scope.launch {
+                                isSubmittingManualCode = true
+                                val res = authManager.handleManualAuthCode(manualCodeInput)
+                                isSubmittingManualCode = false
+                                if (res.isSuccess) {
+                                    showManualCodeDialog = false
+                                    Toast.makeText(context, "Google 帳號連線成功！正在同步...", Toast.LENGTH_SHORT).show()
+                                    repository.syncWithGoogle()
+                                } else {
+                                    Toast.makeText(context, "授權失敗: ${res.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    },
+                    enabled = !isSubmittingManualCode && manualCodeInput.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                ) {
+                    if (isSubmittingManualCode) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Text("驗證並連線", color = Color.White)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showManualCodeDialog = false },
+                    enabled = !isSubmittingManualCode
+                ) {
+                    Text("取消")
+                }
+            }
+        )
+    }
+
+    // Custom Credentials Dialog
+    if (showCustomCredentialsDialog) {
+        AlertDialog(
+            onDismissRequest = { showCustomCredentialsDialog = false },
+            title = { Text("自訂 Google Cloud 憑證") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "預設已內建桌面專用憑證。若您需要覆蓋為自己的 Google Cloud 專案憑證，可於此設定：",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = customClientId,
+                        onValueChange = { customClientId = it },
+                        label = { Text("OAuth Client ID") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = customClientSecret,
+                        onValueChange = { customClientSecret = it },
+                        label = { Text("OAuth Client Secret") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        authManager.setCustomCredentials(customClientId, customClientSecret)
+                        showCustomCredentialsDialog = false
+                        Toast.makeText(context, "已儲存自訂憑證設定", Toast.LENGTH_SHORT).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                ) {
+                    Text("儲存", color = Color.White)
+                }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        authManager.clearCustomCredentials()
+                        customClientId = authManager.getClientId()
+                        customClientSecret = authManager.getClientSecret()
+                        showCustomCredentialsDialog = false
+                        Toast.makeText(context, "已重設為內建預設憑證", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Text("重設", color = TrashRed)
+                    }
+                    TextButton(onClick = { showCustomCredentialsDialog = false }) {
+                        Text("取消")
+                    }
                 }
             }
         )
@@ -477,8 +719,4 @@ private fun getSmartFilterMeta(id: String): Triple<String, androidx.compose.ui.g
         "trash" -> Triple("垃圾桶", Icons.Outlined.Delete, TrashRed)
         else -> Triple(id, Icons.Default.Folder, AccentBlue)
     }
-}
-
-private object MaterialThemeColors {
-    val textSecondary = Color(0xFF8E8E93)
 }
