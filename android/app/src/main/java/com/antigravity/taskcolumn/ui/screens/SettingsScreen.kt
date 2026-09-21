@@ -201,6 +201,7 @@ fun SettingsScreen(
                                     Text("登入", fontSize = 13.sp, color = Color.White)
                                 }
                             }
+                        }
 
                         if (isAuthenticated && !syncErrorMessage.isNullOrBlank()) {
                             Text(
